@@ -1,10 +1,8 @@
 import { AiVisibilityRepository as repo } from "../repositories/AiVisibilityRepository";
 import { AiVisibilityError } from "./aiVisibilityErrors";
 import { aiScope } from "./aiVisibilityConfiguration";
-import {
-  getOptionalEnvValue,
-  isHostedServerAuthMode,
-} from "@/server/lib/runtime-env";
+import { isHostedServerAuthMode } from "@/server/lib/runtime-env";
+import { isDataforseoProviderConfigured } from "@/server/lib/dataforseo/core";
 import {
   aiEngineUsesModelApi,
   AI_ENGINE_LABELS,
@@ -99,7 +97,7 @@ export async function estimateCost(
             `${liveEngines.map((e) => AI_ENGINE_LABELS[e]).join(" and ")} ${liveEngines.length === 1 ? "uses" : "use"} live API pricing, which costs more per answer.`,
           ]
         : []),
-      ...(!(await getOptionalEnvValue("DATAFORSEO_API_KEY"))
+      ...(!(await isDataforseoProviderConfigured())
         ? [
             "DataForSEO is not configured on this server. Setup is available; collection needs an operator to add its API key.",
           ]

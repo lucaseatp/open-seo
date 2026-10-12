@@ -3,7 +3,7 @@ import { z } from "zod";
 import {
   cacheableJson,
   chargeToolBudget,
-  dataforseoKey,
+  dataforseoProvider,
   failureResponse,
   fetchDataforseoResult,
   guardToolRequest,
@@ -99,8 +99,8 @@ export const Route = createFileRoute("/api/spam-score-checker")({
           );
         }
 
-        const apiKey = dataforseoKey();
-        if (!apiKey) return serviceUnavailable(TOOL.slug);
+        const provider = dataforseoProvider();
+        if (!provider) return serviceUnavailable(TOOL.slug);
 
         const blocked = await guardToolRequest({
           tool: TOOL.slug,
@@ -138,7 +138,7 @@ export const Route = createFileRoute("/api/spam-score-checker")({
             fetchDataforseoResult(
               "/v3/backlinks/summary/live",
               commonPayload,
-              apiKey,
+              provider,
             ),
             fetchDataforseoResult(
               "/v3/backlinks/backlinks/live",
@@ -148,7 +148,7 @@ export const Route = createFileRoute("/api/spam-score-checker")({
                 mode: "one_per_domain",
                 order_by: ["backlink_spam_score,desc"],
               },
-              apiKey,
+              provider,
             ),
           ]);
 

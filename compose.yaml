@@ -18,7 +18,12 @@ services:
       - AUTH_MODE=local_noauth
       - OPENSEO_TELEMETRY_DISABLED=${OPENSEO_TELEMETRY_DISABLED:-}
       - DO_NOT_TRACK=${DO_NOT_TRACK:-}
-      - DATAFORSEO_API_KEY=${DATAFORSEO_API_KEY}
+      - DATAFORSEO_API_KEY=${DATAFORSEO_API_KEY:-}
+      # Optional: route DataForSEO calls through treg.to instead (see
+      # docs/DATAFORSEO_API_KEY.md). TREG_TOKEN replaces DATAFORSEO_API_KEY.
+      - DATAFORSEO_PROVIDER=${DATAFORSEO_PROVIDER:-}
+      - TREG_TOKEN=${TREG_TOKEN:-}
+      - TREG_BASE_URL=${TREG_BASE_URL:-}
       # Optional: AI features (the SAM agent). Without this the setup
       # gate in the app asks for the key, but nothing here would forward it.
       - OPENROUTER_API_KEY=${OPENROUTER_API_KEY:-}

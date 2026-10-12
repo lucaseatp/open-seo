@@ -30,6 +30,10 @@ const STANDARD_MESSAGES: Record<ErrorCode, string> = {
     "The AI visibility request could not be completed. Review the tracking settings and try again.",
   DATAFORSEO_AUTH_FAILED:
     "DataForSEO rejected the API key. Check that DATAFORSEO_API_KEY is the base64 of your DataForSEO login:password.",
+  TREG_AUTH_FAILED:
+    "treg rejected the token. Check that TREG_TOKEN is a valid, unrevoked treg.to API token.",
+  TREG_BALANCE_TOO_LOW:
+    "The treg balance is too low for this request. Top up at treg.to, then retry.",
   RATE_LIMITED: "Too many requests. Please wait and try again.",
   UPSTREAM_UNAVAILABLE:
     "The data provider is temporarily unavailable. Please retry in a moment.",

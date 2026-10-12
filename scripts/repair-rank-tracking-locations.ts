@@ -25,7 +25,8 @@
  *
  * Needs POSTGRES_DATABASE_URL and DATAFORSEO_API_KEY (the locations endpoint
  * is free). Registries are cached under --cache-dir (default .cache/) so the
- * apply run does not refetch ~10MB per country.
+ * apply run does not refetch ~10MB per country. Refuses DATAFORSEO_PROVIDER=treg:
+ * treg serves neither the locations endpoint nor the sandbox.
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -45,10 +46,18 @@ import {
   type SerpLocationMatch,
   type SerpRegistryLocation,
 } from "./serp-location-match";
+import { selectedDataforseoProvider } from "../src/shared/dataforseo-provider";
 import { loadLocalEnv, parseArgs, requiredEnv } from "./cli-utils";
 import { fetchRegistry, sandboxAccepts } from "./rank-location-repair-support";
 
 loadLocalEnv();
+
+if (selectedDataforseoProvider(process.env) === "treg") {
+  console.error(
+    "repair:rank-locations needs the direct DataForSEO provider: treg serves neither the location registry nor the sandbox. Unset DATAFORSEO_PROVIDER and set DATAFORSEO_API_KEY.",
+  );
+  process.exit(1);
+}
 
 const args = parseArgs(process.argv.slice(2));
 const apply = args.apply !== undefined;

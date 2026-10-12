@@ -49,6 +49,7 @@
     "billing:backlinks": "tsx scripts/backlinks-cost-profile.ts",
     "billing:brand-lookup": "tsx scripts/brand-lookup-cost-profile.ts",
     "billing:usage": "tsx scripts/dataforseo-account-usage.ts",
+    "treg:smoke": "tsx scripts/treg-smoke.ts",
     "cleanup:default-projects:d1": "tsx scripts/d1-default-project-cleanup.ts",
     "gdpr:erase-user": "tsx scripts/erase-user-data.ts",
     "repair:rank-locations": "tsx scripts/repair-rank-tracking-locations.ts",
@@ -68,7 +69,16 @@
         "description": "Cloudflare Access Application Audience (AUD) tag for this Worker route/domain."
       },
       "DATAFORSEO_API_KEY": {
-        "description": "Base64-encoded `login:password` for DataForSEO API access."
+        "description": "Base64-encoded `login:password` for DataForSEO API access. Not needed when DATAFORSEO_PROVIDER=treg."
+      },
+      "DATAFORSEO_PROVIDER": {
+        "description": "Optional. `dataforseo` (default) calls api.dataforseo.com; `treg` routes DataForSEO calls through treg.to using TREG_TOKEN."
+      },
+      "TREG_TOKEN": {
+        "description": "treg.to API token, required when DATAFORSEO_PROVIDER=treg."
+      },
+      "TREG_BASE_URL": {
+        "description": "Optional treg base URL. Defaults to https://treg.to."
       },
       "OAUTH_KV": {
         "description": "KV namespace used by the Cloudflare Workers OAuth provider for MCP client registrations, grants, and tokens."

@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import type { DataforseoProvider } from "../../../../src/shared/dataforseo-provider";
 import { z } from "zod";
 import { countryLanguage } from "@/lib/free-tools/countries";
 import {
@@ -13,7 +14,7 @@ import {
 import {
   cacheableJson,
   chargeToolBudget,
-  dataforseoKey,
+  dataforseoProvider,
   failureResponse,
   fetchDataforseoResult,
   guardToolRequest,
@@ -84,8 +85,8 @@ export const Route = createFileRoute("/api/website-traffic-checker")({
           );
         }
 
-        const apiKey = dataforseoKey();
-        if (!apiKey) return serviceUnavailable(TOOL.slug);
+        const provider = dataforseoProvider();
+        if (!provider) return serviceUnavailable(TOOL.slug);
 
         const blocked = await guardToolRequest({
           tool: TOOL.slug,
@@ -124,7 +125,7 @@ export const Route = createFileRoute("/api/website-traffic-checker")({
                 domain,
                 parsed.data.locationCode,
                 language,
-                apiKey,
+                provider,
               );
               fetched.set(domain, snapshot);
               await writeCached(
@@ -173,7 +174,7 @@ async function fetchDomainTraffic(
   domain: string,
   locationCode: number,
   languageCode: string,
-  apiKey: string,
+  provider: DataforseoProvider,
 ): Promise<DomainTraffic> {
   const base = {
     target: domain,
@@ -185,7 +186,7 @@ async function fetchDomainTraffic(
     fetchDataforseoResult(
       "/v3/dataforseo_labs/google/domain_rank_overview/live",
       { ...base, limit: 1 },
-      apiKey,
+      provider,
     ),
     fetchDataforseoResult(
       "/v3/dataforseo_labs/google/ranked_keywords/live",
@@ -195,12 +196,12 @@ async function fetchDomainTraffic(
         limit: ROW_LIMIT,
         order_by: RANKED_KEYWORDS_ORDER,
       },
-      apiKey,
+      provider,
     ),
     fetchDataforseoResult(
       "/v3/dataforseo_labs/google/relevant_pages/live",
       { ...base, limit: ROW_LIMIT, order_by: RELEVANT_PAGES_ORDER },
-      apiKey,
+      provider,
     ),
   ]);
 

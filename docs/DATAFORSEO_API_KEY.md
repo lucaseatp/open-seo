@@ -17,3 +17,43 @@ Set the value as `DATAFORSEO_API_KEY`:
 - **Docker self-hosting:** in `.env` (see [`SELF_HOSTING_DOCKER.md`](./SELF_HOSTING_DOCKER.md)).
 - **Cloudflare self-hosting:** in `.env.selfhost` (see [`SELF_HOSTING_CLOUDFLARE.md`](./SELF_HOSTING_CLOUDFLARE.md)). Legacy button/Wrangler deployments: as a Worker secret in the dashboard under `Settings` -> `Variables & Secrets`.
 - **Local development:** in `.env.local` (see [`LOCAL_DEVELOPMENT.md`](./LOCAL_DEVELOPMENT.md)).
+
+## Using treg
+
+Instead of your own DataForSEO account, OpenSEO can send its DataForSEO requests through [treg](https://treg.to). treg holds the DataForSEO credential, bills your treg balance, and returns DataForSEO's response unchanged. You don't need `DATAFORSEO_API_KEY` in this mode.
+
+Set these variables wherever you would set the API key:
+
+```sh
+DATAFORSEO_PROVIDER=treg
+TREG_TOKEN=your-treg-api-token
+# Optional, defaults to https://treg.to
+# TREG_BASE_URL=https://treg.to
+```
+
+`DATAFORSEO_PROVIDER` accepts `dataforseo` (the default, which calls `api.dataforseo.com` with `DATAFORSEO_API_KEY`) or `treg`. Any other value, or `treg` without `TREG_TOKEN`, is a configuration error: the self-host preflight reports it and SEO data requests fail with a message naming the missing variable.
+
+Each request goes to a treg catalog endpoint (`https://treg.to/call/<endpoint-id>`) with your token in the `X-Treg-Token` header. OpenSEO keeps a fixed list of which DataForSEO endpoint maps to which treg endpoint.
+
+If treg rejects the token, OpenSEO reports that `TREG_TOKEN` is invalid or revoked. If your treg balance can't cover a request, it says so; top up at [treg.to](https://treg.to/app#billing). treg's rate limits and daily caps show up as rate-limit errors.
+
+### What doesn't work through treg
+
+treg's catalog has no `task_get` routes, so DataForSEO's queued tasks can't be collected, and a few endpoints OpenSEO calls aren't in the catalog. Two more can't be used on treg credit: DataForSEO account usage (treg serves it only with your own DataForSEO key) and the per-country location list (larger than treg can relay). OpenSEO refuses these requests before sending them. It never falls back to `api.dataforseo.com`.
+
+| Feature                                                            | Behavior with treg                                                                                                                                                  |
+| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Scheduled rank tracking                                            | Queued checks fail and every keyword goes to the live fallback. Results still arrive, but at live prices (about three times the queued price).                      |
+| AI Visibility scheduled collection                                 | Fails. Manual checks use live answers and work.                                                                                                                     |
+| Local rank grid, business reviews and business updates (MCP tools) | Fail. These rely on queued tasks.                                                                                                                                   |
+| Business category list (MCP `list_business_categories`)            | Fails.                                                                                                                                                              |
+| Brand lookup and Prompt Research (LLM Mentions)                    | Fail. treg lists LLM Mentions under different endpoint names.                                                                                                       |
+| LLM model lists for Prompt Explorer                                | OpenSEO uses its built-in model list.                                                                                                                               |
+| Location check when saving a rank tracker                          | Skipped. It uses the DataForSEO sandbox, which treg doesn't serve.                                                                                                  |
+| City, county and region targeting                                  | Fails. The location picker, MCP `search_serp_locations`, and local keyword research or SERP checks need the country's location list. Country-level targeting works. |
+| `pnpm billing:usage`                                               | Exits with a message. Check your balance and spend in the treg dashboard instead.                                                                                   |
+| `pnpm repair:rank-locations`                                       | Exits with a message. It needs the location list and the DataForSEO sandbox.                                                                                        |
+
+Everything else works through treg, including keyword research, domain overview, backlinks, live SERPs, Lighthouse, and manual AI Visibility checks.
+
+To check a token, run `TREG_TOKEN=... pnpm treg:smoke`. It checks that an unsupported endpoint is refused without a request, then makes one keyword overview call, which costs about $0.01.

@@ -6,16 +6,18 @@ import type {
   BudgetReservation,
 } from "@/lib/free-tools/budget";
 import type { FreeToolSlug } from "@/lib/free-tools/tool-pages";
-
-const DATAFORSEO_BASE = "https://api.dataforseo.com";
+import {
+  buildDataforseoRequest,
+  resolveDataforseoProvider,
+  type DataforseoProvider,
+} from "../../../../src/shared/dataforseo-provider";
 
 /** Every free tool shares the same per-visitor rate limiter. */
 type RateLimiter = {
   limit(options: { key: string }): Promise<{ success: boolean }>;
 };
 
-type Bindings = {
-  DATAFORSEO_API_KEY?: string;
+type Bindings = Parameters<typeof resolveDataforseoProvider>[0] & {
   TURNSTILE_SECRET_KEY?: string;
   BACKLINK_CHECK_RATE_LIMIT?: RateLimiter;
   FREE_TOOL_BUDGET?: DurableObjectNamespace<FreeToolBudget>;
@@ -65,12 +67,18 @@ export function failureResponse(message: string) {
   });
 }
 
-export function dataforseoKey(): string | undefined {
-  return bindings().DATAFORSEO_API_KEY;
+/** The configured provider, or undefined when its env is missing or invalid. */
+export function dataforseoProvider(): DataforseoProvider | undefined {
+  try {
+    return resolveDataforseoProvider(bindings());
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : error);
+    return undefined;
+  }
 }
 
 export function serviceUnavailable(tool: string) {
-  console.error(`Missing DATAFORSEO_API_KEY for ${tool}`);
+  console.error(`DataForSEO is not configured for ${tool}`);
   return jsonResponse({ error: "Service temporarily unavailable" }, 503);
 }
 
@@ -308,14 +316,12 @@ const taskEnvelopeSchema = z.object({
 export async function fetchDataforseoResult(
   path: string,
   payload: Record<string, unknown>,
-  apiKey: string,
+  provider: DataforseoProvider,
 ) {
-  const response = await fetch(`${DATAFORSEO_BASE}${path}`, {
+  const request = buildDataforseoRequest(provider, path);
+  const response = await fetch(request.url, {
     method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Basic ${apiKey}`,
-    },
+    headers: { "Content-Type": "application/json", ...request.headers },
     body: JSON.stringify([payload]),
     signal: AbortSignal.timeout(30_000),
   });

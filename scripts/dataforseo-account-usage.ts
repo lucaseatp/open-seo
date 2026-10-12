@@ -1,4 +1,8 @@
 import process from "node:process";
+import {
+  isDataforseoConfigured,
+  selectedDataforseoProvider,
+} from "@/shared/dataforseo-provider";
 import { fetchUserData } from "@/server/lib/dataforseo/appendix";
 import { loadLocalEnv, parseArgs } from "./cli-utils";
 
@@ -18,8 +22,18 @@ await main();
  * Usage: pnpm billing:usage [--json=true]
  */
 async function main() {
-  if (!process.env.DATAFORSEO_API_KEY) {
-    printUsageAndExit("Missing DATAFORSEO_API_KEY.");
+  if (!isDataforseoConfigured(process.env)) {
+    printUsageAndExit(
+      "Missing DATAFORSEO_API_KEY (or TREG_TOKEN with DATAFORSEO_PROVIDER=treg).",
+    );
+  }
+  // treg serves user_data only with an org's own DataForSEO key, and its
+  // numbers would describe that account, not the treg balance this app spends.
+  if (selectedDataforseoProvider(process.env) === "treg") {
+    console.error(
+      "DataForSEO account usage is not available with DATAFORSEO_PROVIDER=treg. Check your treg balance and spend at https://treg.to/app#billing.",
+    );
+    process.exit(1);
   }
 
   const account = await fetchUserData();
