@@ -50,7 +50,7 @@ OpenSEO supports two self-hosting paths:
   - We plan to make it simpler to host on those platforms in the next few months.
 - **Recommended: Cloudflare** - For internet-facing self-hosting across multiple devices or with your team (works on the free plan). See [`docs/SELF_HOSTING_CLOUDFLARE.md`](./docs/SELF_HOSTING_CLOUDFLARE.md).
 
-Either way, you need a DataForSEO API key to get SEO data. See [`docs/DATAFORSEO_API_KEY.md`](./docs/DATAFORSEO_API_KEY.md). You can also route DataForSEO calls through [treg](https://treg.to) with a treg token instead of a key (`DATAFORSEO_PROVIDER=treg`). Some queued-task features don't work in that mode; see [Using treg](./docs/DATAFORSEO_API_KEY.md#using-treg).
+Either way, you need a DataForSEO API key to get SEO data. See [`docs/DATAFORSEO_API_KEY.md`](./docs/DATAFORSEO_API_KEY.md). You can also route DataForSEO calls through [treg](https://treg.to) with a treg token instead of a key (`DATAFORSEO_PROVIDER=treg`). Some features, including queued tasks and city-level location targeting, don't work in that mode; see [Using treg](./docs/DATAFORSEO_API_KEY.md#using-treg).
 
 ## Costs
 
