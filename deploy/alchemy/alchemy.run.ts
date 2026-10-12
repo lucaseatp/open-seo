@@ -266,7 +266,22 @@ const resolveSelfHostAccess = (
 const dataEnv = {
   // AUTH_MODE, DATABASE_PROVIDER, BETTER_AUTH_URL, TEAM_DOMAIN, and
   // POLICY_AUD are stage-dependent and set in the stack body below.
-  DATAFORSEO_API_KEY: Config.redacted("DATAFORSEO_API_KEY"),
+  // Required unless DATAFORSEO_PROVIDER=treg, where treg injects
+  // DataForSEO's credential and TREG_TOKEN authenticates instead.
+  DATAFORSEO_API_KEY: Config.redacted("DATAFORSEO_API_KEY").pipe(
+    Config.orElse((error) =>
+      optionalVar("DATAFORSEO_PROVIDER").pipe(
+        Config.mapOrFail((provider) =>
+          provider.toLowerCase() === "treg"
+            ? Effect.succeed(Redacted.make(""))
+            : Effect.fail(error),
+        ),
+      ),
+    ),
+  ),
+  DATAFORSEO_PROVIDER: optionalVar("DATAFORSEO_PROVIDER"),
+  TREG_TOKEN: optionalSecret("TREG_TOKEN"),
+  TREG_BASE_URL: optionalVar("TREG_BASE_URL"),
   BYPASS_EMAIL_VERIFICATION: optionalVar("BYPASS_EMAIL_VERIFICATION"),
   BETTER_AUTH_SECRET: optionalSecret("BETTER_AUTH_SECRET"),
   GOOGLE_CLIENT_ID: optionalVar("GOOGLE_CLIENT_ID"),
@@ -397,11 +412,14 @@ export default Alchemy.Stack(
         R2: resources.R2,
         // Deliberately NOT ...dataEnv: this worker crawls and parses
         // attacker-influenced HTML, so it gets only the secrets its code
-        // path reads — DataForSEO (Lighthouse), Autumn (metering), PostHog
+        // path reads — DataForSEO or treg (Lighthouse), Autumn (metering), PostHog
         // (capture). No auth/OAuth/Loops/Turnstile secrets.
         BROWSER: Cloudflare.Browser(),
         CONTEXT_API_KEY: dataEnv.CONTEXT_API_KEY,
         DATAFORSEO_API_KEY: dataEnv.DATAFORSEO_API_KEY,
+        DATAFORSEO_PROVIDER: dataEnv.DATAFORSEO_PROVIDER,
+        TREG_TOKEN: dataEnv.TREG_TOKEN,
+        TREG_BASE_URL: dataEnv.TREG_BASE_URL,
         AUTUMN_SECRET_KEY: dataEnv.AUTUMN_SECRET_KEY,
         POSTHOG_PUBLIC_KEY: dataEnv.POSTHOG_PUBLIC_KEY,
         POSTHOG_HOST: dataEnv.POSTHOG_HOST,
