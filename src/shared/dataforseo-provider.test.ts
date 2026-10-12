@@ -102,16 +102,10 @@ describe("buildDataforseoRequest", () => {
     });
   });
 
-  it("passes treg path parameters as query parameters", () => {
-    expect(
-      buildDataforseoRequest(treg, "/v3/serp/google/locations/us").url,
-    ).toBe(
-      "https://treg.to/call/dataforseo.x.serp-google-locations-country?country=us",
-    );
-  });
-
   it.each([
     "/v3/serp/google/organic/task_get/advanced/task-1",
+    "/v3/serp/google/locations/us",
+    "/v3/appendix/user_data",
     "/v3/backlinks/anchors/live",
   ])("fails fast on %s instead of calling DataForSEO", (path) => {
     expect(() => buildDataforseoRequest(treg, path)).toThrow(

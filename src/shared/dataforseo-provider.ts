@@ -42,12 +42,11 @@ export class TregUnsupportedEndpointError extends Error {
 }
 
 /**
- * DataForSEO path (as OpenSEO calls it) -> treg catalog endpoint id. A
- * `{name}` segment is a path parameter; treg takes it as a query parameter of
- * the same name. Every id was checked with `treg catalog get`.
+ * DataForSEO path (as OpenSEO calls it) -> treg catalog endpoint id. Every id
+ * was checked with `treg catalog get`. All mapped paths are static; `{name}`
+ * segments appear only in the unsupported list below.
  */
 const TREG_ENDPOINT_IDS: Record<string, string> = {
-  "/v3/appendix/user_data": "dataforseo.account.usage",
   "/v3/backlinks/summary/live": "dataforseo.web.backlinks.summary",
   "/v3/backlinks/backlinks/live": "dataforseo.web.backlinks.list",
   "/v3/backlinks/referring_domains/live": "dataforseo.web.linking_domains.list",
@@ -82,8 +81,6 @@ const TREG_ENDPOINT_IDS: Record<string, string> = {
     "dataforseo.x.serp-google-maps-live-advanced",
   "/v3/serp/google/local_finder/live/advanced":
     "dataforseo.x.serp-google-local-finder-live-advanced",
-  "/v3/serp/google/locations/{country}":
-    "dataforseo.x.serp-google-locations-country",
   "/v3/ai_optimization/chat_gpt/llm_scraper/live/advanced":
     "dataforseo.x.ai-optimization-chat-gpt-llm-scraper-live-advanced",
   "/v3/ai_optimization/gemini/llm_scraper/live/advanced":
@@ -110,14 +107,22 @@ const NO_TASK_GET =
   "treg's catalog has no task_get route, so a queued task's results could not be collected";
 const UNMAPPED = "OpenSEO has no treg mapping for this path";
 const NO_CATALOG_ENTRY = "treg's catalog has no endpoint for this path";
+const OWN_KEY_ONLY =
+  "treg serves this endpoint only with the org's own connected DataForSEO key, not on treg credit";
+const OVER_RESPONSE_BUFFER =
+  "the country location list (about 9.5 MB for the US) exceeds treg's 8 MiB response buffer";
 
 /**
  * Paths OpenSEO calls that treg cannot serve, and why. Kept explicit so a
- * missing mapping is a decision, not an oversight. The business task_post
- * routes do exist on treg but are refused here: without task_get the task
- * would be billed and its results never read.
+ * missing mapping is a decision, not an oversight. Some of these exist in
+ * treg's catalog but are refused here because the call cannot succeed on
+ * treg credit: the business task_post routes (without task_get the task
+ * would be billed and its results never read), account usage, and the
+ * country location list.
  */
 const TREG_UNSUPPORTED_ENDPOINTS: Record<string, string> = {
+  "/v3/appendix/user_data": OWN_KEY_ONLY,
+  "/v3/serp/google/locations/{country}": OVER_RESPONSE_BUFFER,
   "/v3/serp/google/organic/task_post": NO_CATALOG_ENTRY,
   "/v3/serp/google/organic/task_get/advanced/{id}": NO_TASK_GET,
   "/v3/serp/google/maps/task_post": NO_CATALOG_ENTRY,
@@ -140,38 +145,26 @@ const TREG_UNSUPPORTED_ENDPOINTS: Record<string, string> = {
     NO_CATALOG_ENTRY,
 };
 
-function matchTemplate(
-  template: string,
-  path: string,
-): Record<string, string> | null {
+/** Whether `path` fills `template`, where a `{name}` segment matches any value. */
+function matchesTemplate(template: string, path: string): boolean {
   const templateSegments = template.split("/");
   const pathSegments = path.split("/");
-  if (templateSegments.length !== pathSegments.length) return null;
-  const params: Record<string, string> = {};
-  for (const [index, segment] of templateSegments.entries()) {
-    const actual = pathSegments[index];
-    const name = /^\{(\w+)\}$/.exec(segment)?.[1];
-    if (name) {
-      if (!actual) return null;
-      params[name] = decodeURIComponent(actual);
-    } else if (segment !== actual) {
-      return null;
-    }
-  }
-  return params;
+  return (
+    templateSegments.length === pathSegments.length &&
+    templateSegments.every(
+      (segment, index) =>
+        segment === pathSegments[index] ||
+        (/^\{\w+\}$/.test(segment) && pathSegments[index] !== ""),
+    )
+  );
 }
 
-/** The treg catalog id and path parameters for a DataForSEO path. */
-function resolveTregEndpoint(path: string): {
-  id: string;
-  params: Record<string, string>;
-} {
-  for (const [template, id] of Object.entries(TREG_ENDPOINT_IDS)) {
-    const params = matchTemplate(template, path);
-    if (params) return { id, params };
-  }
+/** The treg catalog id for a DataForSEO path. */
+function resolveTregEndpointId(path: string): string {
+  const id = TREG_ENDPOINT_IDS[path];
+  if (id) return id;
   for (const [template, reason] of Object.entries(TREG_UNSUPPORTED_ENDPOINTS)) {
-    if (matchTemplate(template, path))
+    if (matchesTemplate(template, path))
       throw new TregUnsupportedEndpointError(path, reason);
   }
   throw new TregUnsupportedEndpointError(path, UNMAPPED);
@@ -256,10 +249,8 @@ export function buildDataforseoRequest(
       `${options.baseUrl}${path}`,
       "treg only reaches the production DataForSEO API",
     );
-  const { id, params } = resolveTregEndpoint(path);
-  const query = new URLSearchParams(params).toString();
   return {
-    url: `${provider.baseUrl}/call/${id}${query ? `?${query}` : ""}`,
+    url: `${provider.baseUrl}/call/${resolveTregEndpointId(path)}`,
     headers: { "X-Treg-Token": provider.token },
   };
 }
