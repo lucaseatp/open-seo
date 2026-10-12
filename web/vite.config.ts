@@ -69,6 +69,10 @@ export default defineConfig(async ({ mode }) => {
           searchForWorkspaceRoot(process.cwd()),
           // Public copyable prompts shared with the application outside web/.
           ...publicPromptFiles,
+          // DataForSEO provider switch shared with the app (direct or treg).
+          fileURLToPath(
+            new URL("../src/shared/dataforseo-provider.ts", import.meta.url),
+          ),
         ],
       },
     },

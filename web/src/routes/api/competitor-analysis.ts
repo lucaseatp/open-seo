@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import type { DataforseoProvider } from "../../../../src/shared/dataforseo-provider";
 import { z } from "zod";
 import { countryLanguage } from "@/lib/free-tools/countries";
 import {
@@ -14,7 +15,7 @@ import {
 import {
   cacheableJson,
   chargeToolBudget,
-  dataforseoKey,
+  dataforseoProvider,
   failureResponse,
   fetchDataforseoResult,
   guardToolRequest,
@@ -137,8 +138,8 @@ export const Route = createFileRoute("/api/competitor-analysis")({
           );
         }
 
-        const apiKey = dataforseoKey();
-        if (!apiKey) return serviceUnavailable(TOOL.slug);
+        const provider = dataforseoProvider();
+        if (!provider) return serviceUnavailable(TOOL.slug);
 
         const blocked = await guardToolRequest({
           tool: TOOL.slug,
@@ -183,7 +184,7 @@ export const Route = createFileRoute("/api/competitor-analysis")({
                 limit: KEYWORD_LIMIT,
                 order_by: RANKED_KEYWORDS_ORDER,
               },
-              apiKey,
+              provider,
             ),
             fetchDataforseoResult(
               "/v3/dataforseo_labs/google/relevant_pages/live",
@@ -193,7 +194,7 @@ export const Route = createFileRoute("/api/competitor-analysis")({
                 limit: PAGE_LIMIT,
                 order_by: RELEVANT_PAGES_ORDER,
               },
-              apiKey,
+              provider,
             ),
           ]);
 
@@ -218,12 +219,12 @@ export const Route = createFileRoute("/api/competitor-analysis")({
               fetchDataforseoResult(
                 "/v3/dataforseo_labs/google/domain_rank_overview/live",
                 { ...base, target: competitor, limit: 1 },
-                apiKey,
+                provider,
               ),
               fetchDataforseoResult(
                 "/v3/dataforseo_labs/google/domain_rank_overview/live",
                 { ...base, target: yourDomain, limit: 1 },
-                apiKey,
+                provider,
               ),
             ]);
             result.comparison = {
@@ -238,7 +239,7 @@ export const Route = createFileRoute("/api/competitor-analysis")({
               competitor,
               yourDomain,
               base,
-              apiKey,
+              provider,
             );
             result.gapFailed = result.gap === null;
           }
@@ -282,7 +283,7 @@ async function fetchKeywordGap(
   competitor: string,
   yourDomain: string,
   base: { location_code: number; language_code: string },
-  apiKey: string,
+  provider: DataforseoProvider,
 ): Promise<GapRow[] | null> {
   try {
     const raw = await fetchDataforseoResult(
@@ -295,7 +296,7 @@ async function fetchKeywordGap(
         item_types: ["organic"],
         limit: GAP_LIMIT,
       },
-      apiKey,
+      provider,
     );
 
     return (

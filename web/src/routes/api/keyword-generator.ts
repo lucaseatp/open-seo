@@ -5,7 +5,7 @@ import { readKeywordIdea } from "@/lib/free-tools/labs";
 import {
   cacheableJson,
   chargeToolBudget,
-  dataforseoKey,
+  dataforseoProvider,
   failureResponse,
   fetchDataforseoResult,
   guardToolRequest,
@@ -45,8 +45,8 @@ export const Route = createFileRoute("/api/keyword-generator")({
           turnstileToken: parsed.data.turnstileToken,
         });
         if (blocked) return blocked;
-        const apiKey = dataforseoKey();
-        if (!apiKey) return serviceUnavailable(TOOL);
+        const provider = dataforseoProvider();
+        if (!provider) return serviceUnavailable(TOOL);
         const key = `core-v2|${value}|${parsed.data.locationCode}`;
         const cached = await readCached(TOOL, key);
         if (cached)
@@ -73,7 +73,7 @@ export const Route = createFileRoute("/api/keyword-generator")({
               language_code: language,
               limit: 20,
             },
-            apiKey,
+            provider,
           );
           const items = itemsResultSchema.parse(raw ?? {}).items ?? [];
           const result = {

@@ -3,7 +3,7 @@ import { z } from "zod";
 import {
   cacheableJson,
   chargeToolBudget,
-  dataforseoKey,
+  dataforseoProvider,
   failureResponse,
   fetchDataforseoResult,
   guardToolRequest,
@@ -97,8 +97,8 @@ export const Route = createFileRoute("/api/backlink-check")({
           );
         }
 
-        const apiKey = dataforseoKey();
-        if (!apiKey) return serviceUnavailable(TOOL.slug);
+        const provider = dataforseoProvider();
+        if (!provider) return serviceUnavailable(TOOL.slug);
 
         const blocked = await guardToolRequest({
           tool: TOOL.slug,
@@ -137,7 +137,7 @@ export const Route = createFileRoute("/api/backlink-check")({
             fetchDataforseoResult(
               "/v3/backlinks/summary/live",
               commonPayload,
-              apiKey,
+              provider,
             ),
             fetchDataforseoResult(
               "/v3/backlinks/backlinks/live",
@@ -148,7 +148,7 @@ export const Route = createFileRoute("/api/backlink-check")({
                 // Strongest linking domains first, like Ahrefs' free checker.
                 order_by: ["domain_from_rank,desc"],
               },
-              apiKey,
+              provider,
             ),
           ]);
 
