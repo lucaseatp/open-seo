@@ -1,7 +1,7 @@
 import { AiVisibilityRepository as repo } from "../repositories/AiVisibilityRepository";
 import { AiVisibilityError } from "./aiVisibilityErrors";
 import { activeAiPrompts } from "./aiVisibilityConfiguration";
-import { getOptionalEnvValue } from "@/server/lib/runtime-env";
+import { isDataforseoProviderConfigured } from "@/server/lib/dataforseo/core";
 import type { BillingCustomerContext } from "@/server/billing/subscription";
 import type { AiRun } from "@/shared/ai-visibility";
 import type { SetAiScheduleInput } from "@/types/schemas/ai-visibility";
@@ -32,7 +32,7 @@ export async function setSchedule(
       "NO_ACTIVE_PROMPTS",
       "Add active prompts before enabling scheduled tracking.",
     );
-  if (!(await getOptionalEnvValue("DATAFORSEO_API_KEY")))
+  if (!(await isDataforseoProviderConfigured()))
     throw new AiVisibilityError(
       "PROVIDER_NOT_CONFIGURED",
       "Configure DataForSEO before enabling collection. Setup remains available.",

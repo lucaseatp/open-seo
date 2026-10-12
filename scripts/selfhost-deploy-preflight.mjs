@@ -43,7 +43,18 @@ for (const line of readFileSync(envFile, "utf8").split("\n")) {
   const match = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$/.exec(line);
   if (match) env[match[1]] = match[2].replace(/^(["'])(.*)\1$/, "$2");
 }
-if (!env.DATAFORSEO_API_KEY) {
+const dataforseoProvider = (env.DATAFORSEO_PROVIDER ?? "").trim().toLowerCase();
+if (dataforseoProvider === "treg") {
+  if (!env.TREG_TOKEN) {
+    fail(
+      `${em("DATAFORSEO_PROVIDER=treg")} needs ${em("TREG_TOKEN")} in ${envFile} — see docs/DATAFORSEO_API_KEY.md#using-treg.`,
+    );
+  }
+} else if (dataforseoProvider && dataforseoProvider !== "dataforseo") {
+  fail(
+    `${em("DATAFORSEO_PROVIDER")} must be "dataforseo" or "treg" in ${envFile}.`,
+  );
+} else if (!env.DATAFORSEO_API_KEY) {
   fail(
     `${em("DATAFORSEO_API_KEY")} is not set in ${envFile} — see docs/DATAFORSEO_API_KEY.md for how to get one.`,
   );

@@ -55,4 +55,28 @@ describe("runSelfhostPreflight", () => {
     expect(itemFor(result, "Search Console")?.level).toBe("warn");
     expect(itemFor(result, "Search Console")?.message).toContain("32");
   });
+
+  it("accepts a treg token in place of the DataForSEO key", () => {
+    const result = runSelfhostPreflight({
+      AUTH_MODE: "local_noauth",
+      DATAFORSEO_PROVIDER: "treg",
+      TREG_TOKEN: "token",
+    });
+
+    expect(itemFor(result, "DATAFORSEO_PROVIDER")?.level).toBe("ok");
+    expect(itemFor(result, "DATAFORSEO_API_KEY")).toBeUndefined();
+  });
+
+  it("warns when treg is selected without a token", () => {
+    const result = runSelfhostPreflight({
+      AUTH_MODE: "local_noauth",
+      DATAFORSEO_PROVIDER: "treg",
+      DATAFORSEO_API_KEY: btoa("user@example.com:secret"),
+    });
+
+    expect(itemFor(result, "DATAFORSEO_PROVIDER")?.level).toBe("warn");
+    expect(itemFor(result, "DATAFORSEO_PROVIDER")?.message).toContain(
+      "TREG_TOKEN",
+    );
+  });
 });

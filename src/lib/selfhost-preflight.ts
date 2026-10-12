@@ -1,5 +1,10 @@
 import { AUTH_MODES } from "@/lib/auth-mode";
 import {
+  resolveDataforseoProvider,
+  selectedDataforseoProvider,
+  type DataforseoProvider,
+} from "@/shared/dataforseo-provider";
+import {
   looksLikeDataForSeoKey,
   MIN_BETTER_AUTH_SECRET_LENGTH,
   validateTeamDomain,
@@ -121,6 +126,31 @@ function checkAuthMode(env: EnvRecord, items: PreflightItem[]): void {
 }
 
 function checkDataForSeo(env: EnvRecord, items: PreflightItem[]): void {
+  let provider: DataforseoProvider | undefined;
+  try {
+    // Only an explicit treg selection is resolved here; the default provider
+    // keeps the key checks below.
+    if (selectedDataforseoProvider(env) === "treg")
+      provider = resolveDataforseoProvider(env);
+  } catch (error) {
+    items.push({
+      key: "dataforseo",
+      name: "DATAFORSEO_PROVIDER",
+      level: "warn",
+      message: `${error instanceof Error ? error.message : String(error)} — all SEO data features will be unavailable until it is fixed.`,
+    });
+    return;
+  }
+  if (provider?.kind === "treg") {
+    items.push({
+      key: "dataforseo",
+      name: "DATAFORSEO_PROVIDER",
+      level: "ok",
+      message: `treg via ${provider.baseUrl}. Queued tasks (scheduled rank and AI tracking, business reviews) and LLM mentions are unavailable through treg; see docs/DATAFORSEO_API_KEY.md.`,
+    });
+    return;
+  }
+
   const key = get(env, "DATAFORSEO_API_KEY");
 
   if (!key) {
