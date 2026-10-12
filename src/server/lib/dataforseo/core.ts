@@ -1,5 +1,17 @@
 import { AppError } from "@/server/lib/errors";
-import { getRequiredEnvValue } from "@/server/lib/runtime-env";
+import { getOptionalEnvValue as lookupEnv } from "@/server/lib/env-lookup";
+import {
+  getOptionalEnvValue,
+  getRequiredEnvValue,
+} from "@/server/lib/runtime-env";
+import {
+  buildDataforseoRequest,
+  isDataforseoConfigured,
+  resolveDataforseoProvider,
+  selectedDataforseoProvider,
+  TregUnsupportedEndpointError,
+  type DataforseoProvider,
+} from "@/shared/dataforseo-provider";
 import type { ErrorCode } from "@/shared/error-codes";
 // Type-only: erased at compile, so no runtime cycle with envelope.ts (which
 // imports DataforseoErrorClassifier from here the same way).
@@ -8,7 +20,6 @@ import type {
   DataforseoTaskLike,
 } from "@/server/lib/dataforseo/envelope";
 
-const API_BASE = "https://api.dataforseo.com";
 const MAX_DATAFORSEO_ERROR_PAYLOAD_LENGTH = 1600;
 // Safety ceiling on any live call (Lighthouse is the slowest, ~tens of seconds).
 const DATAFORSEO_REQUEST_TIMEOUT_MS = 60_000;
@@ -46,12 +57,49 @@ function formatDataforseoErrorPayload(value: unknown): string {
     : text;
 }
 
-function formatDataforseoRequestPath(url: RequestInfo): string {
-  const rawUrl = typeof url === "string" ? url : url.url;
+async function loadProvider(): Promise<DataforseoProvider> {
+  const env = {
+    DATAFORSEO_PROVIDER: await lookupEnv("DATAFORSEO_PROVIDER"),
+    TREG_TOKEN: await lookupEnv("TREG_TOKEN"),
+    TREG_BASE_URL: await lookupEnv("TREG_BASE_URL"),
+  };
+  // The default provider reads its key exactly as it always has.
+  if (selectedDataforseoProvider(env) === "dataforseo")
+    return {
+      kind: "dataforseo",
+      apiKey: await getRequiredEnvValue("DATAFORSEO_API_KEY"),
+    };
+  return resolveDataforseoProvider(env);
+}
+
+/** Whether the operator configured a DataForSEO key or a treg token. */
+export async function isDataforseoProviderConfigured(): Promise<boolean> {
+  return isDataforseoConfigured({
+    DATAFORSEO_PROVIDER: await getOptionalEnvValue("DATAFORSEO_PROVIDER"),
+    DATAFORSEO_API_KEY: await getOptionalEnvValue("DATAFORSEO_API_KEY"),
+    TREG_TOKEN: await getOptionalEnvValue("TREG_TOKEN"),
+  });
+}
+
+/**
+ * Resolve where `path` goes for the configured provider (DataForSEO or treg).
+ * A path treg cannot serve fails here, before any request is sent.
+ */
+async function buildRequest(path: string, baseUrl: string | undefined) {
+  const provider = await loadProvider();
   try {
-    return new URL(rawUrl).pathname;
-  } catch {
-    return rawUrl;
+    return buildDataforseoRequest(provider, path, { baseUrl });
+  } catch (error) {
+    if (!(error instanceof TregUnsupportedEndpointError)) throw error;
+    // An operator choice, not an app bug: warn so it shows in logs, and
+    // surface it as a provider limitation.
+    console.warn("dataforseo.treg-unsupported-endpoint", { path: error.path });
+    const unsupported = new AppError("UPSTREAM_UNAVAILABLE", error.message, {
+      provider: "treg",
+      providerPath: error.path,
+    });
+    unsupported.name = error.name;
+    throw unsupported;
   }
 }
 
@@ -65,19 +113,31 @@ function createAuthenticatedFetch(
   classify?: DataforseoErrorClassifier,
   maxServerErrorRetries = DATAFORSEO_MAX_RETRIES,
 ) {
-  return async (url: RequestInfo, init?: RequestInit): Promise<Response> => {
-    const apiKey = await getRequiredEnvValue("DATAFORSEO_API_KEY");
-    const headers = new Headers(init?.headers);
-    headers.set("Authorization", `Basic ${apiKey}`);
+  return async (
+    path: string,
+    init: RequestInit & { baseUrl?: string },
+  ): Promise<Response> => {
+    const { url, headers: authHeaders } = await buildRequest(
+      path,
+      init.baseUrl,
+    );
+    const headers = new Headers(init.headers);
+    for (const [name, value] of Object.entries(authHeaders))
+      headers.set(name, value);
     // Resolve the signal once so retries share the overall request timeout
     // rather than restarting a fresh 60s budget on each attempt.
     const signal =
-      init?.signal ?? AbortSignal.timeout(DATAFORSEO_REQUEST_TIMEOUT_MS);
+      init.signal ?? AbortSignal.timeout(DATAFORSEO_REQUEST_TIMEOUT_MS);
 
     for (let attempt = 0; ; attempt++) {
       let response: Response;
       try {
-        response = await fetch(url, { ...init, headers, signal });
+        response = await fetch(url, {
+          method: init.method,
+          body: init.body,
+          headers,
+          signal,
+        });
       } catch (error) {
         // Both abort flavours mean "we ran out of time", and neither carries a
         // useful name of its own: the shared budget above rejects with
@@ -92,7 +152,6 @@ function createAuthenticatedFetch(
           error instanceof Error &&
           (error.name === "TimeoutError" || error.name === "AbortError")
         ) {
-          const path = formatDataforseoRequestPath(url);
           const timeoutError = new AppError(
             "UPSTREAM_UNAVAILABLE",
             `DataForSEO request timed out on ${path}`,
@@ -114,7 +173,6 @@ function createAuthenticatedFetch(
       }
 
       const rawText = await response.text();
-      const path = formatDataforseoRequestPath(url);
       const classified = classify?.(response.status, rawText, path);
       if (classified) throw classified;
 
@@ -175,7 +233,8 @@ async function requestDataforseo<TTask extends DataforseoTaskLike>(
     options.classify,
     options.maxServerErrorRetries,
   );
-  const response = await doFetch(`${options.baseUrl ?? API_BASE}${path}`, {
+  const response = await doFetch(path, {
+    baseUrl: options.baseUrl,
     method,
     headers: {
       Accept: "application/json",
@@ -223,7 +282,7 @@ export function dataforseoPostResponse(
     options.classify,
     options.maxServerErrorRetries,
   );
-  return doFetch(`${API_BASE}${path}`, {
+  return doFetch(path, {
     method: "POST",
     headers: { Accept: "application/json", "Content-Type": "application/json" },
     body: JSON.stringify(tasks),
