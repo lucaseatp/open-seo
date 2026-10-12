@@ -1,3 +1,4 @@
+import { z } from "zod";
 import { AppError } from "@/server/lib/errors";
 import { getOptionalEnvValue as lookupEnv } from "@/server/lib/env-lookup";
 import {
@@ -88,7 +89,10 @@ export async function isDataforseoProviderConfigured(): Promise<boolean> {
 async function buildRequest(path: string, baseUrl: string | undefined) {
   const provider = await loadProvider();
   try {
-    return buildDataforseoRequest(provider, path, { baseUrl });
+    return {
+      provider: provider.kind,
+      ...buildDataforseoRequest(provider, path, { baseUrl }),
+    };
   } catch (error) {
     if (!(error instanceof TregUnsupportedEndpointError)) throw error;
     // An operator choice, not an app bug: warn so it shows in logs, and
@@ -101,6 +105,73 @@ async function buildRequest(path: string, baseUrl: string | undefined) {
     unsupported.name = error.name;
     throw unsupported;
   }
+}
+
+// treg's own refusals put a string or an `{ error, message }` object in
+// `detail`. Relayed DataForSEO responses don't match and get no reason.
+const tregErrorBodySchema = z.object({
+  detail: z.union([z.string(), z.object({ error: z.string() })]),
+});
+
+function tregErrorReason(rawText: string): string {
+  try {
+    const parsed = tregErrorBodySchema.safeParse(JSON.parse(rawText));
+    if (parsed.success)
+      return typeof parsed.data.detail === "string"
+        ? parsed.data.detail
+        : parsed.data.detail.error;
+  } catch {
+    // Not JSON: fall through.
+  }
+  return "no detail";
+}
+
+/**
+ * Map treg's own HTTP refusals to errors that name treg, not DataForSEO.
+ * Checked before the caller's DataForSEO billing classifier: a low treg
+ * balance is not a problem with a DataForSEO account. Returns null for
+ * statuses the shared ladder already handles.
+ */
+function classifyTregHttpError(
+  status: number,
+  rawText: string,
+  path: string,
+): AppError | null {
+  const reason = tregErrorReason(rawText);
+  let code: ErrorCode;
+  let message: string;
+  if (status === 401 || status === 403) {
+    code = "TREG_AUTH_FAILED";
+    message = `treg rejected TREG_TOKEN with HTTP ${status} (${reason}) on ${path}. Set TREG_TOKEN to a valid, unrevoked treg.to API token.`;
+  } else if (status === 402) {
+    code = "TREG_BALANCE_TOO_LOW";
+    message = `treg balance too low for ${path} (${reason}). Top up at treg.to, then retry.`;
+  } else if (status === 429) {
+    code = "RATE_LIMITED";
+    message = `treg rate limit or daily cap reached on ${path} (${reason}).`;
+  } else {
+    return null;
+  }
+  const error = new AppError(code, message, {
+    provider: "treg",
+    providerStatus: String(status),
+    providerPath: path,
+    responseBody: formatDataforseoErrorPayload(rawText),
+  });
+  error.name = "TregHttpError";
+  return error;
+}
+
+/**
+ * treg refuses to relay a response larger than its settlement buffer with a
+ * 502 (not charged). The response size won't change on a retry.
+ */
+async function isTregResponseBufferLimit(
+  provider: DataforseoProvider["kind"],
+  response: Response,
+): Promise<boolean> {
+  if (provider !== "treg" || response.status !== 502) return false;
+  return (await response.clone().text()).includes("response_buffer_limit");
 }
 
 /**
@@ -117,10 +188,11 @@ function createAuthenticatedFetch(
     path: string,
     init: RequestInit & { baseUrl?: string },
   ): Promise<Response> => {
-    const { url, headers: authHeaders } = await buildRequest(
-      path,
-      init.baseUrl,
-    );
+    const {
+      provider,
+      url,
+      headers: authHeaders,
+    } = await buildRequest(path, init.baseUrl);
     const headers = new Headers(init.headers);
     for (const [name, value] of Object.entries(authHeaders))
       headers.set(name, value);
@@ -165,7 +237,11 @@ function createAuthenticatedFetch(
       if (response.ok) return response;
 
       // Transient upstream 5xx on an idempotent read -> back off and retry.
-      if (response.status >= 500 && attempt < maxServerErrorRetries) {
+      if (
+        response.status >= 500 &&
+        attempt < maxServerErrorRetries &&
+        !(await isTregResponseBufferLimit(provider, response))
+      ) {
         await new Promise((resolve) =>
           setTimeout(resolve, DATAFORSEO_RETRY_BACKOFF_MS * (attempt + 1)),
         );
@@ -173,6 +249,11 @@ function createAuthenticatedFetch(
       }
 
       const rawText = await response.text();
+      const tregError =
+        provider === "treg"
+          ? classifyTregHttpError(response.status, rawText, path)
+          : null;
+      if (tregError) throw tregError;
       const classified = classify?.(response.status, rawText, path);
       if (classified) throw classified;
 
@@ -186,9 +267,9 @@ function createAuthenticatedFetch(
               : "INTERNAL_ERROR";
       const error = new AppError(
         code,
-        `DataForSEO HTTP ${response.status} on ${path}`,
+        `${provider === "treg" ? "treg" : "DataForSEO"} HTTP ${response.status} on ${path}`,
         {
-          provider: "dataforseo",
+          provider,
           providerStatus: String(response.status),
           providerPath: path,
           responseBody: formatDataforseoErrorPayload(rawText),

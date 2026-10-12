@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { dataforseoGet, dataforseoPost } from "@/server/lib/dataforseo/core";
+import { AppError } from "@/server/lib/errors";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -73,5 +74,89 @@ describe("DataForSEO transport provider", () => {
       },
     });
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it.each<{ env: Record<string, string>; code: string; message: string }>([
+    {
+      env: { DATAFORSEO_PROVIDER: "", DATAFORSEO_API_KEY: "key" },
+      code: "DATAFORSEO_AUTH_FAILED",
+      message: "DataForSEO HTTP 401",
+    },
+    {
+      env: { DATAFORSEO_PROVIDER: "treg", TREG_TOKEN: "revoked" },
+      code: "TREG_AUTH_FAILED",
+      message: "treg rejected TREG_TOKEN with HTTP 401 (revoked key)",
+    },
+  ])("maps a 401 to $code", async ({ env, code, message }) => {
+    for (const [name, value] of Object.entries(env)) vi.stubEnv(name, value);
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(
+          Response.json({ detail: "revoked key" }, { status: 401 }),
+        ),
+    );
+
+    const request = dataforseoPost("/v3/backlinks/summary/live", []);
+    await expect(request).rejects.toMatchObject({ code });
+    await expect(request).rejects.toThrow(message);
+  });
+
+  describe("treg refusals", () => {
+    function stubTreg(response: Response) {
+      vi.stubEnv("DATAFORSEO_PROVIDER", "treg");
+      vi.stubEnv("TREG_TOKEN", "treg-token");
+      const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(response);
+      vi.stubGlobal("fetch", fetchMock);
+      return fetchMock;
+    }
+
+    it("reports a low treg balance, not a DataForSEO billing issue", async () => {
+      stubTreg(
+        Response.json(
+          { detail: { error: "insufficient_balance", balance_micro: 0 } },
+          { status: 402 },
+        ),
+      );
+
+      const request = dataforseoPost("/v3/backlinks/summary/live", [], {
+        classify: () => new AppError("BACKLINKS_BILLING_ISSUE"),
+      });
+      await expect(request).rejects.toMatchObject({
+        code: "TREG_BALANCE_TOO_LOW",
+      });
+      await expect(request).rejects.toThrow("Top up at treg.to");
+    });
+
+    it("maps a treg 429 to RATE_LIMITED", async () => {
+      stubTreg(
+        Response.json(
+          { detail: { error: "platform_daily_cap_reached" } },
+          { status: 429 },
+        ),
+      );
+
+      await expect(
+        dataforseoPost("/v3/backlinks/summary/live", []),
+      ).rejects.toMatchObject({ code: "RATE_LIMITED" });
+    });
+
+    it("does not retry a response over treg's buffer limit", async () => {
+      const fetchMock = stubTreg(
+        Response.json(
+          { detail: { error: "response_buffer_limit" } },
+          { status: 502 },
+        ),
+      );
+
+      await expect(
+        dataforseoPost("/v3/backlinks/summary/live", []),
+      ).rejects.toMatchObject({
+        code: "UPSTREAM_UNAVAILABLE",
+        message: "treg HTTP 502 on /v3/backlinks/summary/live",
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
   });
 });
