@@ -6,8 +6,8 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { z } from "zod";
+import { dataforseoGet } from "@/server/lib/dataforseo/core";
 import { probeSerpLocation } from "@/server/lib/dataforseo/serp-location-validate";
-import { requiredEnv } from "./cli-utils";
 import type { SerpRegistryLocation } from "./serp-location-match";
 
 const registryItemSchema = z.object({
@@ -37,16 +37,9 @@ export async function fetchRegistry(
       readFileSync(cachePath, "utf8"),
     ) as SerpRegistryLocation[];
   }
-  const response = await fetch(
-    `https://api.dataforseo.com/v3/serp/google/locations/${encodeURIComponent(iso)}`,
-    {
-      headers: { Authorization: `Basic ${requiredEnv("DATAFORSEO_API_KEY")}` },
-    },
+  const parsed = registryResponseSchema.parse(
+    await dataforseoGet(`/v3/serp/google/locations/${encodeURIComponent(iso)}`),
   );
-  if (!response.ok) {
-    throw new Error(`locations/${iso}: HTTP ${response.status}`);
-  }
-  const parsed = registryResponseSchema.parse(await response.json());
   const task = parsed.tasks[0];
   if (!task || task.status_code !== 20000) {
     throw new Error(

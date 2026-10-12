@@ -1,4 +1,5 @@
 import process from "node:process";
+import { isDataforseoConfigured } from "@/shared/dataforseo-provider";
 import { fetchUserData } from "@/server/lib/dataforseo/appendix";
 import { loadLocalEnv, parseArgs } from "./cli-utils";
 
@@ -18,8 +19,10 @@ await main();
  * Usage: pnpm billing:usage [--json=true]
  */
 async function main() {
-  if (!process.env.DATAFORSEO_API_KEY) {
-    printUsageAndExit("Missing DATAFORSEO_API_KEY.");
+  if (!isDataforseoConfigured(process.env)) {
+    printUsageAndExit(
+      "Missing DATAFORSEO_API_KEY (or TREG_TOKEN with DATAFORSEO_PROVIDER=treg).",
+    );
   }
 
   const account = await fetchUserData();

@@ -1,4 +1,5 @@
 import process from "node:process";
+import { isDataforseoConfigured } from "@/shared/dataforseo-provider";
 import {
   fetchLlmAggregatedMetrics,
   fetchLlmCrossAggregatedMetrics,
@@ -40,8 +41,10 @@ async function main() {
     );
   }
 
-  if (!process.env.DATAFORSEO_API_KEY) {
-    printUsageAndExit("Missing DATAFORSEO_API_KEY.");
+  if (!isDataforseoConfigured(process.env)) {
+    printUsageAndExit(
+      "Missing DATAFORSEO_API_KEY (or TREG_TOKEN with DATAFORSEO_PROVIDER=treg).",
+    );
   }
 
   const target = args.target;

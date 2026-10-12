@@ -1,4 +1,5 @@
 import process from "node:process";
+import { isDataforseoConfigured } from "@/shared/dataforseo-provider";
 import { createBacklinksService } from "@/server/features/backlinks/services/BacklinksService";
 import type { BillingCustomerContext } from "@/server/billing/subscription";
 import type {
@@ -115,8 +116,10 @@ function buildInput(cliArgs: Record<string, string>): BacklinksLookupInput {
   if (!target) {
     printUsageAndExit("Missing target.");
   }
-  if (!process.env.DATAFORSEO_API_KEY) {
-    printUsageAndExit("Missing DATAFORSEO_API_KEY.");
+  if (!isDataforseoConfigured(process.env)) {
+    printUsageAndExit(
+      "Missing DATAFORSEO_API_KEY (or TREG_TOKEN with DATAFORSEO_PROVIDER=treg).",
+    );
   }
 
   return {

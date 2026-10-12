@@ -49,6 +49,7 @@
     "billing:backlinks": "tsx scripts/backlinks-cost-profile.ts",
     "billing:brand-lookup": "tsx scripts/brand-lookup-cost-profile.ts",
     "billing:usage": "tsx scripts/dataforseo-account-usage.ts",
+    "treg:smoke": "tsx scripts/treg-smoke.ts",
     "cleanup:default-projects:d1": "tsx scripts/d1-default-project-cleanup.ts",
     "gdpr:erase-user": "tsx scripts/erase-user-data.ts",
     "repair:rank-locations": "tsx scripts/repair-rank-tracking-locations.ts",
